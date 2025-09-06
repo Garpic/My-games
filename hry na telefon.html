@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<title>Herní menu s dotykovým ovládáním</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap');
+  body {
+    margin: 0;
+    background: linear-gradient(135deg, #0f2027, #20343b);
+    font-family: 'Montserrat', sans-serif;
+    color: #e0e0e0;
+    text-align: center;
+    padding: 40px;
+    user-select: none;
+  }
+  h1 {
+    font-weight: 700;
+    font-size: 3rem;
+    margin-bottom: 40px;
+    letter-spacing: 2px;
+    color: #33ffd6;
+    text-shadow: 0 0 15px #33ffd6;
+  }
+  #menu {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-bottom: 50px;
+  }
+  #menu button {
+    background: linear-gradient(45deg, #00fff7, #008ea5);
+    border: none;
+    border-radius: 14px;
+    padding: 16px 48px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #121212;
+    cursor: pointer;
+    box-shadow: 0 6px 15px rgba(0,255,255,0.6);
+    transition: background 0.3s, box-shadow 0.3s, transform 0.15s;
+  }
+  #menu button:hover {
+    background: linear-gradient(45deg, #008ea5, #00fff7);
+    box-shadow: 0 12px 30px rgba(0,255,255,0.8);
+    transform: translateY(-3px);
+  }
+  #menu button:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 10px rgba(0,255,255,0.4);
+  }
+  .game {
+    display: none;
+    max-width: 640px;
+    margin: 0 auto 40px auto;
+    background: #121f2f;
+    box-shadow: 0 0 40px #00fff7cc;
+    border-radius: 16px;
+    padding: 20px;
+  }
+  h2 {
+    font-weight: 700;
+    font-size: 2rem;
+    margin-bottom: 15px;
+    color: #00ffe0;
+    text-shadow: 0 0 10px #00ffe0aa;
+  }
+  canvas {
+    background: #001820;
+    border-radius: 12px;
+    border: 4px solid #00fff7;
+    box-shadow: 0 0 25px #00fff7aa;
+    display: block;
+    margin: 0 auto;
+  }
+  .controls {
+    margin-top: 15px;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    user-select: none;
+  }
+  .control-row {
+    margin-top: 8px;
+    gap: 10px;
+    display: flex;
+    justify-content: center;
+  }
+  .controls button {
+    background: #00fff7;
+    color: #001820;
+    border: none;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 1.3rem;
+    padding: 12px 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px #00fff7cc;
+    transition: background 0.3s, box-shadow 0.3s, transform 0.15s;
+  }
+  .controls button:active {
+    background: #008ea5;
+    box-shadow: 0 2px 5px #00707dcc;
+    transform: translateY(2px);
+  }
+</style>
+</head>
+<body>
+<h1>Vyberte hru</h1>
+<div id="menu">
+  <button onclick="showGame('snake')">Had</button>
+  <button onclick="showGame('tetris')">Tetris</button>
+  <button onclick="showGame('shooter')">Střílečka</button>
+</div>
+
+<div id="snake" class="game">
+  <h2>Had <span id="snakeScore"></span></h2>
+  <canvas id="snakeCanvas" width="400" height="400"></canvas>
+  <div class="controls">
+    <button id="snakeUp">⬆️</button>
+  </div>
+  <div class="control-row">
+    <button id="snakeLeft">⬅️</button>
+    <button id="snakeDown">⬇️</button>
+    <button id="snakeRight">➡️</button>
+  </div>
+</div>
+
+<div id="tetris" class="game">
+  <h2>Tetris <span id="tetrisScore"></span></h2>
+  <canvas id="tetrisCanvas" width="200" height="400"></canvas>
+  <div class="controls">
+    <button id="tetrisRotate">⟳</button>
+    <button id="tetrisDrop">⤓</button>
+  </div>
+  <div class="control-row">
+    <button id="tetrisLeft">⬅️</button>
+    <button id="tetrisDown">⬇️</button>
+    <button id="tetrisRight">➡️</button>
+  </div>
+</div>
+
+<div id="shooter" class="game">
+  <h2>Střílečka <span id="shooterScore"></span></h2>
+  <canvas id="shooterCanvas" width="600" height="400"></canvas>
+  <div class="controls">
+    <button id="shooterLeft">⬅️</button>
+    <button id="shooterShoot">🔫</button>
+    <button id="shooterRight">➡️</button>
+  </div>
+</div>
+
+<script>
+let currentGame = null;
+function showGame(name) {
+  if (currentGame) currentGame.stop();
+  document.querySelectorAll(".game").forEach(el => (el.style.display = "none"));
+  document.getElementById("snakeScore").textContent = "";
+  document.getElementById("tetrisScore").textContent = "";
+  document.getElementById("shooterScore").textContent = "";
+  if (name) {
+    document.getElementById(name).style.display = "block";
+    if (name === "snake") currentGame = snakeGame;
+    else if (name === "tetris") currentGame = tetrisGame;
+    else if (name === "shooter") currentGame = shooterGame;
+    currentGame.start();
+  } else currentGame = null;
+}
+
+// ------------ HAD --------------
+const snakeCanvas = document.getElementById("snakeCanvas");
+const snakeCtx = snakeCanvas.getContext("2d");
+const snakeGrid = 20;
+let snakeInterval, snakeState;
+
+const snakeGame = {
+  start() {
+    snakeState = {
+      snake: [{ x: 10, y: 10 }],
+      velX: 1,
+      velY: 0,
+      apple: { x: 15, y: 15 },
+      tail: 5,
+      score: 0,
+      gameOver: false,
+    };
+    this.keyHandler = e => {
+      if (snakeState.gameOver) return;
+      if (e.key === "ArrowUp" && snakeState.velY !== 1) {
+        snakeState.velX = 0;
+        snakeState.velY = -1;
+      } else if (e.key === "ArrowDown" && snakeState.velY !== -1) {
+        snakeState.velX = 0;
+        snakeState.velY = 1;
+      } else if (e.key === "ArrowLeft" && snakeState.velX !== 1) {
+        snakeState.velX = -1;
+        snakeState.velY = 0;
+      } else if (e.key === "ArrowRight" && snakeState.velX !== -1) {
+        snakeState.velX = 1;
+        snakeState.velY = 0;
+      }
+    };
+
+    window.addEventListener("keydown", this.keyHandler);
+
+    // Touch controls
+    document.getElementById("snakeUp").addEventListener("touchstart", e => {
+      e.preventDefault();
+      moveSnake("up");
+    });
+    document.getElementById("snakeLeft").addEventListener("touchstart", e => {
+      e.preventDefault();
+      moveSnake("left");
+    });
+    document.getElementById("snakeDown").addEventListener("touchstart", e => {
+      e.preventDefault();
+      moveSnake("down");
+    });
+    document.getElementById("snakeRight").addEventListener("touchstart", e => {
+      e.preventDefault();
+      moveSnake("right");
+    });
+
+    if (snakeInterval) clearInterval(snakeInterval);
+    snakeInterval = setInterval(() => this.update(), 110);
+    document.getElementById("snakeScore").textContent = "0";
+    this.draw();
+  },
+  stop() {
+    window.removeEventListener("keydown", this.keyHandler);
+    if (snakeInterval) clearInterval(snakeInterval);
+  },
+  update() {
+    if (snakeState.gameOver) {
+      this.drawGameOver();
+      return;
+    }
+    let head = {
+      x: snakeState.snake[0].x + snakeState.velX,
+      y: snakeState.snake[0].y + snakeState.velY,
+    };
+    if (head.x < 0) head.x = 19;
+    else if (head.x > 19) head.x = 0;
+    if (head.y < 0) head.y = 19;
+    else if (head.y > 19) head.y = 0;
+    if (snakeState.snake.some(s => s.x === head.x && s.y === head.y)) {
+      snakeState.gameOver = true;
+      this.drawGameOver();
+      return;
+    }
+    snakeState.snake.unshift(head);
+    if (head.x === snakeState.apple.x && head.y === snakeState.apple.y) {
+      snakeState.tail++;
+      snakeState.score++;
+      this.placeApple();
+      document.getElementById("snakeScore").textContent = snakeState.score;
+    }
+    while (snakeState.snake.length > snakeState.tail) snakeState.snake.pop();
+    this.draw();
+  },
+  placeApple() {
+    snakeState.apple.x = Math.floor(Math.random() * 20);
+    snakeState.apple.y = Math.floor(Math.random() * 20);
+    if (snakeState.snake.some(s => s.x === snakeState.apple.x && s.y === snakeState.apple.y))
+      this.placeApple();
+  },
+  draw() {
+    snakeCtx.fillStyle = "#001820";
+    snakeCtx.fillRect(0, 0, 400, 400);
+    snakeCtx.fillStyle = "#4deeea";
+    snakeState.snake.forEach(p => {
+      snakeCtx.fillRect(p.x * snakeGrid, p.y * snakeGrid, snakeGrid - 2, snakeGrid - 2);
+    });
+    snakeCtx.fillStyle = "#ff0033";
+    snakeCtx.beginPath();
+    snakeCtx.arc(
+      snakeState.apple.x * snakeGrid + snakeGrid / 2,
+      snakeState.apple.y * snakeGrid + snakeGrid / 2,
+      snakeGrid / 2 - 4,
+      0,
+      Math.PI * 2
+    );
+    snakeCtx.fill();
+    snakeCtx.fillStyle = "#fff";
+    snakeCtx.font = "16px Montserrat, sans-serif";
+    snakeCtx.fillText(`Skóre: ${snakeState.score}`, 10, 20);
+  },
+  drawGameOver() {
+    this.draw();
+    snakeCtx.fillStyle = "#ffd";
+    snakeCtx.font = "28px Montserrat, sans-serif";
+    snakeCtx.textAlign = "center";
+    snakeCtx.fillText(`Konec hry! Skóre: ${snakeState.score}`, 200, 200);
+    snakeCtx.font = "18px Montserrat, sans-serif";
+    snakeCtx.fillText("Pro restart zvol hru v menu", 200, 230);
+  },
+};
+function moveSnake(direction) {
+  if (!snakeState || snakeState.gameOver) return;
+  switch (direction) {
+    case "up":
+      if (snakeState.velY !== 1) {
+        snakeState.velX = 0;
+        snakeState.velY = -1;
+      }
+      break;
+    case "down":
+      if (snakeState.velY !== -1) {
+        snakeState.velX = 0;
+        snakeState.velY = 1;
+      }
+      break;
+    case "left":
+      if (snakeState.velX !== 1) {
+        snakeState.velX = -1;
+        snakeState.velY = 0;
+      }
+      break;
+    case "right":
+      if (snakeState.velX !== -1) {
+        snakeState.velX = 1;
+        snakeState.velY = 0;
+      }
+      break;
+  }
+}
+
+// TETRIS -------------------------------------
+const tetrisCanvas = document.getElementById("tetrisCanvas");
+const tetrisCtx = tetrisCanvas.getContext("2d");
+const T_COLS = 10,
+  T_ROWS = 20,
+  T_BLOCK = 20;
+let tetrisInterval, tetrisState, tetrisAnim;
+
+const TETRIMINOS = [
+  [],
+  [
+    [0, 0, 0, 0],
+    [1, 1, 1, 1],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0],
+    [0, 2, 2, 0],
+    [0, 2, 2, 0],
+    [0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0],
+    [0, 3, 0, 0],
+    [3, 3, 3, 0],
+    [0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0],
+    [0, 4, 4, 0],
+    [4, 4, 0, 0],
+    [0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0],
+    [5, 5, 0, 0],
+    [0, 5, 5, 0],
+    [0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0],
+    [6, 0, 0, 0],
+    [6, 6, 6, 0],
+    [0, 0, 0, 0],
+  ],
+  [
+    [0, 0, 0, 0],
+    [0, 0, 7, 0],
+    [7, 7, 7, 0],
+    [0, 0, 0, 0],
+  ],
+];
+
+const TETRIS_COLORS = [
+  null,
+  "#00f0f0",
+  "#f0f000",
+  "#a000f0",
+  "#00f000",
+  "#f00000",
+  "#0000f0",
+  "#f07a00",
+];
+
+const tetrisGame = {
+  start() {
+    tetrisState = {
+      board: Array.from({ length: T_ROWS }, () => Array(T_COLS).fill(0)),
+      curPiece: null,
+      curID: 0,
+      x: 0,
+      y: 0,
+      score: 0,
+      gameOver: false,
+      dropInterval: 700,
+      lastTime: 0,
+    };
+    this.spawnPiece();
+    this.keyHandler = (e) => {
+      if (tetrisState.gameOver) {
+        if (e.key === "r" || e.key === "R") this.start();
+        return;
+      }
+      switch (e.key) {
+        case "ArrowLeft":
+          this.movePiece(-1);
+          break;
+        case "ArrowRight":
+          this.movePiece(1);
+          break;
+        case "ArrowDown":
+          this.softDrop();
+          break;
+        case "ArrowUp":
+          this.rotatePiece();
+          break;
+        case " ":
+          this.hardDrop();
+          break;
+      }
+    };
+    window.addEventListener("keydown", this.keyHandler);
+    this.lastTime = performance.now();
+    this.loop(this.lastTime);
+    document.getElementById("tetrisScore").textContent = tetrisState.score;
+    // Touch controls for Tetris
+    document
+      .getElementById("tetrisLeft")
+      .addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        this.movePiece(-1);
+      });
+    document
+      .getElementById("tetrisRight")
+      .addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        this.movePiece(1);
+      });
+    document
+      .getElementById("tetrisDown")
+      .addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        this.softDrop();
+      });
+    document
+      .getElementById("tetrisRotate")
+      .addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        this.rotatePiece();
+      });
+    document
+      .getElementById("tetrisDrop")
+      .addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        this.hardDrop();
+      });
+  },
+  stop() {
+    window.removeEventListener("keydown", this.keyHandler);
+    cancelAnimationFrame(tetrisAnim);
+  },
+  spawnPiece() {
+    tetrisState.curID = Math.floor(Math.random() * (TETRIMINOS.length - 1)) + 1;
+    tetrisState.curPiece = TETRIMINOS[tetrisState.curID];
+    tetrisState.x = Math.floor(T_COLS / 2) - 2;
+    tetrisState.y = 0;
+    if (!this.isValidPosition(tetrisState.x, tetrisState.y)) {
+      tetrisState.gameOver = true;
+    }
+  },
+  movePiece(dx) {
+    if (this.isValidPosition(tetrisState.x + dx, tetrisState.y)) {
+      tetrisState.x += dx;
+      this.draw();
+    }
+  },
+  softDrop() {
+    if (this.isValidPosition(tetrisState.x, tetrisState.y + 1)) {
+      tetrisState.y++;
+      this.draw();
+    } else {
+      this.lockPiece();
+    }
+  },
+  hardDrop() {
+    while (this.isValidPosition(tetrisState.x, tetrisState.y + 1)) {
+      tetrisState.y++;
+    }
+    this.lockPiece();
+  },
+  rotatePiece() {
+    const rotated = this.rotateMatrix(tetrisState.curPiece);
+    if (this.isValidPosition(tetrisState.x, tetrisState.y, rotated)) {
+      tetrisState.curPiece = rotated;
+      this.draw();
+    }
+  },
+  rotateMatrix(matrix) {
+    const N = matrix.length;
+    const result = Array.from({ length: N }, () => Array(N).fill(0));
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) result[x][N - 1 - y] = matrix[y][x];
+    return result;
+  },
+  isValidPosition(x, y, piece = tetrisState.curPiece) {
+    for (let r = 0; r < piece.length; r++) {
+      for (let c = 0; c < piece.length; c++) {
+        if (piece[r][c]) {
+          const nx = x + c,
+            ny = y + r;
+          if (nx < 0 || nx >= T_COLS || ny >= T_ROWS || (ny >= 0 && tetrisState.board[ny][nx])) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  },
+  lockPiece() {
+    for (let r = 0; r < tetrisState.curPiece.length; r++)
+      for (let c = 0; c < tetrisState.curPiece.length; c++)
+        if (tetrisState.curPiece[r][c]) {
+          const nx = tetrisState.x + c,
+            ny = tetrisState.y + r;
+          if (ny < 0) {
+            tetrisState.gameOver = true;
+          } else {
+            tetrisState.board[ny][nx] = tetrisState.curID;
+          }
+        }
+    this.clearLines();
+    this.spawnPiece();
+    this.draw();
+  },
+  clearLines() {
+    let lines = 0;
+    for (let y = T_ROWS - 1; y >= 0; y--) {
+      if (tetrisState.board[y].every(val => val !== 0)) {
+        tetrisState.board.splice(y, 1);
+        tetrisState.board.unshift(new Array(T_COLS).fill(0));
+        lines++;
+        y++;
+      }
+    }
+    if (lines > 0) {
+      tetrisState.score += lines * 100;
+      document.getElementById("tetrisScore").textContent = tetrisState.score;
+    }
+  },
+  drawBlock(ctx, x, y, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x * T_BLOCK, y * T_BLOCK, T_BLOCK, T_BLOCK);
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x * T_BLOCK, y * T_BLOCK, T_BLOCK, T_BLOCK);
+  },
+  draw() {
+    tetrisCtx.clearRect(0, 0, tetrisCanvas.width, tetrisCanvas.height);
+
+    // Draw settled blocks
+    for (let y = 0; y < T_ROWS; y++) {
+      for (let x = 0; x < T_COLS; x++) {
+        if (tetrisState.board[y][x]) {
+          this.drawBlock(tetrisCtx, x, y, TETRIS_COLORS[tetrisState.board[y][x]]);
+        }
+      }
+    }
+    // Draw current piece
+    const piece = tetrisState.curPiece;
+    for (let r = 0; r < piece.length; r++) {
+      for (let c = 0; c < piece.length; c++) {
+        if (piece[r][c]) {
+          this.drawBlock(tetrisCtx, tetrisState.x + c, tetrisState.y + r, TETRIS_COLORS[tetrisState.curID]);
+        }
+      }
+    }
+    // Game Over display
+    if (tetrisState.gameOver) {
+      tetrisCtx.fillStyle = "#ffd";
+      tetrisCtx.font = "20px Montserrat, sans-serif";
+      tetrisCtx.textAlign = "center";
+      tetrisCtx.fillText("Konec hry", tetrisCanvas.width / 2, tetrisCanvas.height / 2);
+      tetrisCtx.fillText("Stiskni R pro restart", tetrisCanvas.width / 2, tetrisCanvas.height / 2 + 30);
+    }
+  },
+  loop(currentTime) {
+    let deltaTime = currentTime - tetrisState.lastTime;
+    if (deltaTime > tetrisState.dropInterval) {
+      this.softDrop();
+      tetrisState.lastTime = currentTime;
+    }
+    if (!tetrisState.gameOver) {
+      tetrisAnim = requestAnimationFrame(this.loop.bind(this));
+    } else {
+      this.draw();
+    }
+  }
+};
+
+// ------------ STŘÍLEČKA -------------------
+const shooterCanvas = document.getElementById("shooterCanvas");
+const shooterCtx = shooterCanvas.getContext("2d");
+let shooterState, shooterAnim;
+
+const shooterGame = {
+  start() {
+    shooterState = {
+      playerX: 280,
+      bullets: [],
+      enemies: [],
+      wave: 1,
+      score: 0,
+      enemySpeed: 0.8,
+      gameOver: false,
+      keys: {},
+    };
+    this.keyDownHandler = (e) => {
+      if (e.repeat) return;
+      shooterState.keys[e.key] = true;
+      if (e.key === " ") this.shoot();
+    };
+    this.keyUpHandler = (e) => {
+      shooterState.keys[e.key] = false;
+    };
+    window.addEventListener("keydown", this.keyDownHandler);
+    window.addEventListener("keyup", this.keyUpHandler);
+
+    // Touch controls
+    document.getElementById("shooterLeft").addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      this.moveLeft();
+    });
+    document.getElementById("shooterRight").addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      this.moveRight();
+    });
+    document.getElementById("shooterShoot").addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      this.shoot();
+    });
+    this.createEnemies();
+    shooterAnim = requestAnimationFrame(this.loop.bind(this));
+    document.getElementById("shooterScore").textContent = shooterState.score;
+  },
+  stop() {
+    window.removeEventListener("keydown", this.keyDownHandler);
+    window.removeEventListener("keyup", this.keyUpHandler);
+    cancelAnimationFrame(shooterAnim);
+  },
+  shoot() {
+    if (shooterState.gameOver) return;
+    shooterState.bullets.push({ x: shooterState.playerX + 16, y: 350, speed: 9 });
+  },
+  createEnemies() {
+    shooterState.enemies = [];
+    const count = 3 + Math.floor(shooterState.wave / 2);
+    for (let i = 0; i < count; i++) {
+      shooterState.enemies.push({
+        x: (i % 8) * 65 + 25,
+        y: 35 + Math.floor(i / 8) * 44,
+        r: 19,
+        color: `hsl(${150 + 30 * i}, 80%, 50%)`,
+      });
+    }
+  },
+  update() {
+    if (shooterState.gameOver) {
+      return;
+    }
+    if (shooterState.keys["ArrowLeft"] || shooterState.keys["a"]) {
+      shooterState.playerX = Math.max(0, shooterState.playerX - 6);
+    } else if (shooterState.keys["ArrowRight"] || shooterState.keys["d"]) {
+      shooterState.playerX = Math.min(shooterCanvas.width - 40, shooterState.playerX + 6);
+    }
+    shooterState.bullets.forEach((b, i) => {
+      b.y -= b.speed;
+      if (b.y < 0) shooterState.bullets.splice(i, 1);
+    });
+    shooterState.enemies.forEach((enemy) => {
+      enemy.x += shooterState.enemySpeed;
+    });
+    const rightMost = Math.max(...shooterState.enemies.map((e) => e.x + e.r));
+    const leftMost = Math.min(...shooterState.enemies.map((e) => e.x - e.r));
+    if (rightMost > shooterCanvas.width || leftMost < 0) {
+      shooterState.enemySpeed = -shooterState.enemySpeed;
+      shooterState.enemies.forEach((e) => {
+        e.y += 22;
+      });
+    }
+    for (let i = shooterState.enemies.length - 1; i >= 0; i--) {
+      const e = shooterState.enemies[i];
+      for (let j = shooterState.bullets.length - 1; j >= 0; j--) {
+        const b = shooterState.bullets[j];
+        const dx = b.x - e.x;
+        const dy = b.y - e.y;
+        if (Math.sqrt(dx * dx + dy * dy) < e.r) {
+          shooterState.bullets.splice(j, 1);
+          shooterState.enemies.splice(i, 1);
+          shooterState.score++;
+          document.getElementById("shooterScore").textContent = shooterState.score;
+          break;
+        }
+      }
+    }
+    shooterState.enemies.forEach((enemy) => {
+      if (enemy.y + enemy.r >= shooterCanvas.height) {
+        shooterState.gameOver = true;
+      }
+    });
+    if (shooterState.enemies.length === 0 && !shooterState.gameOver) {
+      shooterState.wave++;
+      shooterState.enemySpeed += 0.2;
+      this.createEnemies();
+    }
+  },
+  moveLeft() {
+    if (shooterState.playerX > 0) shooterState.playerX -= 6;
+  },
+  moveRight() {
+    if (shooterState.playerX < shooterCanvas.width - 40) shooterState.playerX += 6;
+  },
+  draw() {
+    shooterCtx.clearRect(0, 0, shooterCanvas.width, shooterCanvas.height);
+    shooterCtx.save();
+    shooterCtx.translate(shooterState.playerX + 16, 363);
+    shooterCtx.beginPath();
+    shooterCtx.moveTo(-16, 13);
+    shooterCtx.lineTo(0, -13);
+    shooterCtx.lineTo(16, 13);
+    shooterCtx.closePath();
+    shooterCtx.fillStyle = "#00ffe0";
+    shooterCtx.shadowColor = "#00ffe0aa";
+    shooterCtx.shadowBlur = 14;
+    shooterCtx.fill();
+    shooterCtx.restore();
+    shooterCtx.fillStyle = "#ff00ffcc";
+    shooterState.bullets.forEach((b) => {
+      shooterCtx.beginPath();
+      shooterCtx.arc(b.x, b.y, 5, 0, 2 * Math.PI);
+      shooterCtx.fill();
+    });
+    shooterCtx.shadowBlur = 0;
+    shooterState.enemies.forEach((e) => {
+      shooterCtx.beginPath();
+      shooterCtx.arc(e.x, e.y, e.r, 0, 2 * Math.PI);
+      shooterCtx.fillStyle = e.color;
+      shooterCtx.shadowColor = e.color;
+      shooterCtx.shadowBlur = 6;
+      shooterCtx.fill();
+    });
+    if (shooterState.gameOver) {
+      shooterCtx.fillStyle = "#33ffd6";
+      shooterCtx.font = "48px Montserrat, sans-serif";
+      shooterCtx.textAlign = "center";
+      shooterCtx.fillText("Konec hry", shooterCanvas.width / 2, shooterCanvas.height / 2);
+      shooterCtx.font = "24px Montserrat, sans-serif";
+      shooterCtx.fillText("Zvol hru v menu pro restart", shooterCanvas.width / 2, shooterCanvas.height / 2 + 40);
+    }
+  },
+  drawGameOver() {
+    this.draw();
+  },
+  loop() {
+    this.update();
+    this.draw();
+    if (!shooterState.gameOver) {
+      shooterAnim = requestAnimationFrame(this.loop.bind(this));
+    }
+  },
+};
+
+showGame(null);
+</script>
+</body>
+</html>
